@@ -1,0 +1,237 @@
+
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>ESP32 RTC Controller</title>
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body {
+      font-family: "Segoe UI", sans-serif;
+      background: linear-gradient(to right, #141e30, #243b55);
+      color: #fff;
+      text-align: center;
+      margin: 0;
+      padding: 0;
+    }
+    .container {
+      max-width: 420px;
+      margin: 40px auto;
+      background: rgba(255, 255, 255, 0.07);
+      padding: 20px;
+      border-radius: 16px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+    }
+    h1 {
+      font-size: 1.6rem;
+      margin-bottom: 10px;
+    }
+    .clock {
+      font-size: 2rem;
+      font-weight: bold;
+      margin: 10px 0;
+    }
+    .dateDisplay {
+      font-size: 1.2rem;
+      margin-bottom: 20px;
+      opacity: 0.9;
+    }
+    input, button, select {
+      width: 100%;
+      padding: 10px;
+      margin: 8px 0;
+      border: none;
+      border-radius: 8px;
+      font-size: 1rem;
+      box-sizing: border-box;
+    }
+    input, select {
+      background: #fff;
+      color: #000;
+    }
+    button {
+      background: #00c6ff;
+      color: #fff;
+      font-weight: bold;
+      cursor: pointer;
+      transition: background 0.3s;
+    }
+    button:hover {
+      background: #0072ff;
+    }
+
+    select {
+      cursor: pointer;
+      appearance: none;
+      background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/csvg%3e");
+      background-repeat: no-repeat;
+      background-position: right 10px center;
+      background-size: 20px;
+      padding-right: 35px;
+    }
+
+    .displayBox {
+      margin: 10px 0;
+      text-align: left;
+    }
+    .displayBox label {
+      font-weight: bold;
+      display: block;
+      margin-bottom: 5px;
+    }
+    .timeBox {
+      background: #fff;
+      color: #000;
+      padding: 10px;
+      border-radius: 8px;
+      font-size: 1.1rem;
+      text-align: center;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- <h1>ESP32 RTC Controller</h1>
+    <div class="clock" id="clockDisplay">--:--:--</div>
+    <div class="dateDisplay" id="dateDisplay">--/--/----</div> -->
+    
+    <!-- <h3>Set Date & Time</h3>
+    <input type="date" id="dateInput">
+    <input type="time" id="timeInput">
+    <button onclick="sendRTC()">Update RTC</button> -->
+
+    
+
+    <!-- <h3>On/Off Time</h3>
+
+    <div class="displayBox">
+      <label>Active Pumps:</label>
+      <div class="timeBox" id="onTimeDisplay"></div>
+    </div> -->
+
+    <!-- <div class="displayBox">
+      <label>Active Valves:</label>
+      <div class="timeBox" id="offTimeDisplay">21:00</div>
+    </div> -->
+
+    <!-- <div class="displayBox">
+      <label>Active Stage:</label>
+      <div class="timeBox" id="actg"></div>
+    </div> -->
+   
+   <!-- <div class="displayBox">
+      <label>Tank Temperature:</label>
+      <div class="timeBox" id="ttempr"></div>
+    </div> -->
+
+    <div class="displayBox">
+      <label>Room Temperature:</label>
+      <div class="timeBox" id="ttemprh"></div>
+    </div>
+
+
+
+    <h3>Select Stage</h3>
+    <select id="stageSelector">
+      <option value="">-- Select Off Temperature --</option>
+      <option value="Vegetative">24 C</option>
+      <option value="Flowering">25 C</option>
+      <option value="Fruiting">26 C</option>
+      <option value="Fruiting">27 C</option>
+      <option value="Fruiting">28 C</option>
+      <option value="Fruiting">29 C</option>
+      <option value="Fruiting">30 C</option>
+      <option value="Fruiting">31 C</option>
+      <option value="Fruiting">32 C</option>
+      <option value="Fruiting">33 C</option>
+    </select>
+
+    <button onclick="sendStage()">Set Stage</button>
+    
+  </div>
+
+  <script>
+     
+
+    
+
+   
+
+
+
+function gettemph() {
+      var xhttp = new XMLHttpRequest();
+      xhttp.onreadystatechange = function() {
+        if (this.readyState == 4 && this.status == 200) {
+          // Example response: "06:30"
+           {
+            document.getElementById("ttemprh").innerHTML=this.responseText.trim();
+            
+          }
+        }
+      };
+      xhttp.open("GET", "b16", true); // <-- ESP32 must serve this
+      xhttp.send();
+    }
+    setInterval(gettemph, 1000); 
+    gettemph();
+
+
+
+
+    // ----------- SEND DATE & TIME TO ESP32 -------------
+     
+x 
+
+   
+   
+  function sendData6(minute)
+{
+
+     var xhttp1=new XMLHttpRequest();
+    xhttp1.onreadystatechange=function(){
+    if (this.readyState==4 && this.status == 200){
+       document.getElementById("phstate5").inner.HTML=
+       this.responseText;
+       }
+       
+  };
+
+     xhttp1.open("GET", "setph5?phstate5="+minute, true);
+  xhttp1.send();
+
+}
+  
+
+  
+
+// ----------- SEND SELECTED STAGE TO ESP32 -------------
+function sendStage() {
+  let stageVal = document.getElementById("stageSelector").value;
+
+  if (!stageVal) {
+    alert("Please select a stage");
+    return;
+  }
+
+  var xhttp = new XMLHttpRequest();
+  xhttp.onreadystatechange = function() {
+    if (this.readyState == 4 && this.status == 200) {
+      console.log("Stage sent successfully: " + this.responseText);
+      // Optional: Show success message or update UI
+      alert("Stage updated: " + stageVal);
+    }
+  };
+
+  xhttp.open("GET", "setstage?stage=" + stageVal, true);  
+  xhttp.send();
+}
+  
+
+
+  </script>
+</body>
+</html>
