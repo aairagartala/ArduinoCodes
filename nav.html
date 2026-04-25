@@ -1,0 +1,860 @@
+const char MAIN_page[] PROGMEM = R"=====(
+<!DOCTYPE html>
+<html>
+<head>
+    <title>ROR Sign-in user</title>
+    <style>
+      /* Updated input field styling with reduced heights */
+       .Admin-sign-in label {
+           display: block;
+           width: 260px;
+           margin: 15px auto 0;  /* Reduced top margin from 25px to 15px */
+           text-align: center;
+           position: relative;
+        }
+
+        .Admin-sign-in span {
+           font-size: 12px;
+           color: #155E95;
+           text-transform: uppercase;
+           letter-spacing: 0.5px;
+           display: block;
+           margin-bottom: 4px;  /* Reduced from 8px to 4px */
+           text-align: left;
+        }
+
+/* Reduced height input styling */
+        .Admin-sign-in input {
+           position: relative;
+           cursor: text;
+           font-size: 14px;
+           line-height: 20px;
+           padding: 0 16px;
+           height: 36px;  /* Reduced from 48px to 36px */
+           width: 100%;
+           background-color: #fff;
+           border: 1px solid #d6d6e7;
+           border-radius: 3px;
+           color: rgb(35, 38, 59);
+           box-shadow: inset 0 1px 4px 0 rgb(119 122 175 / 30%);
+           overflow: hidden;
+           transition: all 100ms ease-in-out;
+           text-align: left;
+        }
+
+/* Focus state */
+        .Admin-sign-in input:focus {
+           border-color: #3c4fe0;
+           box-shadow: 0 1px 0 0 rgb(35 38 59 / 5%);
+        }
+
+/* Hover state */
+        .Admin-sign-in input:hover {
+           border-color: #b8b8c6;
+        }
+
+/* Enhanced submit button styling */
+        .Admin-sign-in .submit {
+            margin-top: 25px;  /* Reduced from 40px to 25px */
+            margin-bottom: 20px;
+            background: #155E95;
+            text-transform: uppercase;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+            height: 36px;
+            border-radius: 5px;
+            width: 260px;
+            color: #fff;
+        }
+
+        .Admin-sign-in .submit:hover {
+            background: #1a6fab;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(21, 94, 149, 0.2);
+        }
+
+        .Admin-sign-in .submit:active {
+           transform: translateY(0);
+           box-shadow: 0 2px 5px rgba(21, 94, 149, 0.2);
+        }
+    </style>
+    <style>
+        /* Updated input field styling with reduced heights */
+  .form.sign-in label {
+      display: block;
+      width: 260px;
+      margin: 15px auto 0;  /* Reduced top margin from 25px to 15px */
+      text-align: center;
+      position: relative;
+  }
+  
+  .form.sign-in span {
+      font-size: 12px;
+      color: #155E95;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      display: block;
+      margin-bottom: 4px;  /* Reduced from 8px to 4px */
+      text-align: left;
+  }
+  
+  /* Reduced height input styling */
+  .form.sign-in input {
+      position: relative;
+      cursor: text;
+      font-size: 14px;
+      line-height: 20px;
+      padding: 0 16px;
+      height: 36px;  /* Reduced from 48px to 36px */
+      width: 100%;
+      background-color: #fff;
+      border: 1px solid #d6d6e7;
+      border-radius: 3px;
+      color: rgb(35, 38, 59);
+      box-shadow: inset 0 1px 4px 0 rgb(119 122 175 / 30%);
+      overflow: hidden;
+      transition: all 100ms ease-in-out;
+      text-align: left;
+  }
+  
+  /* Focus state */
+  .form.sign-in input:focus {
+      border-color: #3c4fe0;
+      box-shadow: 0 1px 0 0 rgb(35 38 59 / 5%);
+  }
+  
+  /* Hover state */
+  .form.sign-in input:hover {
+      border-color: #b8b8c6;
+  }
+  
+  /* Enhanced submit button styling */
+  .form.sign-in .submit {
+      margin-top: 25px;  /* Reduced from 40px to 25px */
+      margin-bottom: 20px;
+      background: #155E95;
+      text-transform: uppercase;
+      transition: all 0.3s ease;
+      position: relative;
+      overflow: hidden;
+      height: 36px;
+      border-radius: 5px;
+      width: 260px;
+      color: #fff;
+  }
+  
+  .form.sign-in .submit:hover {
+      background: #1a6fab;
+      transform: translateY(-2px);
+      box-shadow: 0 5px 15px rgba(21, 94, 149, 0.2);
+  }
+  
+  .form.sign-in .submit:active {
+      transform: translateY(0);
+      box-shadow: 0 2px 5px rgba(21, 94, 149, 0.2);
+  }
+      </style>
+    <style>
+        
+    </style>
+    <style>
+        /* Existing CSS remains the same */
+
+        *,
+        *:before,
+        *:after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Open Sans', Helvetica, Arial, sans-serif;
+            background: #FFFFFF;
+        }
+
+        input,
+        button {
+            border: none;
+            outline: none;
+            background: none;
+            font-family: 'Open Sans', Helvetica, Arial, sans-serif;
+        }
+
+        .tip {
+            font-size: 20px;
+            margin: 40px auto 50px;
+            text-align: center;
+        }
+
+        .cont {
+            border-radius: 20px;
+            overflow: hidden;
+            position: relative;
+            width: 900px;
+            height: 550px;
+            margin: 0 auto 100px;
+            background: #fff;
+            box-shadow: -10px -10px 15px rgba(255, 255, 255, 0.3), 10px 10px 15px rgba(70, 70, 70, 0.15), inset -10px -10px 15px rgba(255, 255, 255, 0.3), inset 10px 10px 15px rgba(70, 70, 70, 0.15);
+        }
+
+        .form {
+            position: relative;
+            width: 640px;
+            height: 100%;
+            -webkit-transition: -webkit-transform 1.2s ease-in-out;
+            transition: -webkit-transform 1.2s ease-in-out;
+            transition: transform 1.2s ease-in-out;
+            transition: transform 1.2s ease-in-out, -webkit-transform 1.2s ease-in-out;
+            padding: 50px 30px 0;
+        }
+
+        .sub-cont {
+            overflow: hidden;
+            position: absolute;
+            left: 640px;
+            top: 0;
+            width: 900px;
+            height: 100%;
+            padding-left: 260px;
+            background: #fff;
+            -webkit-transition: -webkit-transform 1.2s ease-in-out;
+            transition: -webkit-transform 1.2s ease-in-out;
+            transition: transform 1.2s ease-in-out;
+            transition: transform 1.2s ease-in-out, -webkit-transform 1.2s ease-in-out;
+        }
+
+        .cont.s--signup .sub-cont {
+            -webkit-transform: translate3d(-640px, 0, 0);
+            transform: translate3d(-640px, 0, 0);
+        }
+
+        button {
+            display: block;
+            margin: 0 auto;
+            width: 260px;
+            height: 36px;
+            border-radius: 5px;
+            color: #fff;
+            font-size: 15px;
+            cursor: pointer;
+        }
+
+        .linkPage {
+            display: block;
+            margin: 0 auto;
+            width: 260px;
+            height: 36px;
+            border-radius: 30px;
+            color: #fff;
+            font-size: 15px;
+            cursor: pointer;
+        }
+
+        .img {
+            overflow: hidden;
+            z-index: 2;
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 260px;
+            height: 100%;
+            padding-top: 360px;
+        }
+
+        .img:before {
+            content: '';
+            position: absolute;
+            right: 0;
+            top: 0;
+            width: 900px;
+            height: 100%;
+            background-image: url("ext.jpg");
+            opacity: .8;
+            background-size: cover;
+            -webkit-transition: -webkit-transform 1.2s ease-in-out;
+            transition: transform 1.2s ease-in-out;
+            transition: transform 1.2s ease-in-out, -webkit-transform 1.2s ease-in-out;
+        }
+
+        .img:after {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background: #155E95;
+        }
+
+        .cont.s--signup .img:before {
+            -webkit-transform: translate3d(640px, 0, 0);
+            transform: translate3d(640px, 0, 0);
+        }
+
+        .img__text {
+            z-index: 2;
+            position: absolute;
+            left: 0;
+            top: 50px;
+            width: 100%;
+            padding: 0 20px;
+            text-align: center;
+            color: #fff;
+            -webkit-transition: -webkit-transform 1.2s ease-in-out;
+            transition: -webkit-transform 1.2s ease-in-out;
+            transition: transform 1.2s ease-in-out;
+            transition: transform 1.2s ease-in-out, -webkit-transform 1.2s ease-in-out;
+        }
+
+        .img__text h2 {
+            margin-bottom: 10px;
+            font-weight: normal;
+        }
+
+        .img__text p {
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .cont.s--signup .img__text.m--up {
+            -webkit-transform: translateX(520px);
+            transform: translateX(520px);
+        }
+
+        .img__text.m--in {
+            -webkit-transform: translateX(-520px);
+            transform: translateX(-520px);
+        }
+
+        .cont.s--signup .img__text.m--in {
+            -webkit-transform: translateX(0);
+            transform: translateX(0);
+        }
+
+        .img__btn {
+            overflow: hidden;
+            z-index: 2;
+            position: relative;
+            width: 100px;
+            height: 36px;
+            margin: 0 auto;
+            background: transparent;
+            color: #fff;
+            text-transform: uppercase;
+            font-size: 15px;
+            cursor: pointer;
+        }
+
+        .img__btn:after {
+            content: '';
+            z-index: 2;
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            border: 2px solid #fff;
+            border-radius: 5px;
+        }
+
+        .img__btn span {
+            position: absolute;
+            left: 0;
+            top: 0;
+            display: -webkit-box;
+            display: flex;
+            -webkit-box-pack: center;
+            justify-content: center;
+            -webkit-box-align: center;
+            align-items: center;
+            width: 100%;
+            height: 100%;
+            -webkit-transition: -webkit-transform 1.2s;
+            transition: -webkit-transform 1.2s;
+            transition: transform 1.2s;
+            transition: transform 1.2s, -webkit-transform 1.2s;
+        }
+
+        .img__btn span.m--in {
+            -webkit-transform: translateY(-72px);
+            transform: translateY(-72px);
+        }
+
+        .cont.s--signup .img__btn span.m--in {
+            -webkit-transform: translateY(0);
+            transform: translateY(0);
+        }
+
+        .cont.s--signup .img__btn span.m--up {
+            -webkit-transform: translateY(72px);
+            transform: translateY(72px);
+        }
+
+        h2 {
+            width: 100%;
+            font-size: 26px;
+            text-align: center;
+            padding-top: 10px;
+            padding-bottom: 10px;
+        }
+
+        h4 {
+            width: 100%;
+            font-size: 22px;
+            text-align: center;
+            padding-top: 10px;
+            padding-bottom: 10px;
+        }
+
+        label {
+            display: block;
+            width: 260px;
+            margin: 25px auto 0;
+            text-align: center;
+        }
+
+        label span {
+            font-size: 12px;
+            color: #cfcfcf;
+            text-transform: uppercase;
+        }
+
+        input {
+            display: block;
+            width: 100%;
+            margin-top: 5px;
+            padding-bottom: 5px;
+            font-size: 16px;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.4);
+            text-align: center;
+        }
+
+        .forgot-pass {
+            margin-top: 15px;
+            text-align: center;
+            font-size: 12px;
+            color: #cfcfcf;
+        }
+
+        .submit {
+            margin-top: 40px;
+            margin-bottom: 20px;
+            background: #155E95;
+            text-transform: uppercase;
+        }
+
+        .fb-btn {
+            border: 2px solid #d3dae9;
+            color: #8fa1c7;
+        }
+
+        .fb-btn span {
+            font-weight: bold;
+            color: #455a81;
+        }
+
+        .sign-in {
+            -webkit-transition-timing-function: ease-out;
+            transition-timing-function: ease-out;
+        }
+
+        .cont.s--signup .sign-in {
+            -webkit-transition-timing-function: ease-in-out;
+            transition-timing-function: ease-in-out;
+            -webkit-transition-duration: 1.2s;
+            transition-duration: 1.2s;
+            -webkit-transform: translate3d(640px, 0, 0);
+            transform: translate3d(640px, 0, 0);
+        }
+
+        .Admin-sign-in {
+            -webkit-transform: translate3d(-900px, 0, 0);
+            transform: translate3d(-900px, 0, 0);
+        }
+
+        .cont.s--signup .Admin-sign-in {
+            -webkit-transform: translate3d(0, 0, 0);
+            transform: translate3d(0, 0, 0);
+        }
+
+        .navbar {
+        background-color: #98DED9;
+        box-shadow: 0 0 2rem 0 rgba(33, 37, 41, .1);
+        }
+
+        .navbar-expand .navbar-collapse {
+          min-width: 200px;
+        }
+
+
+        .full-width {
+           width: 100%;
+           height: 70px;
+           position: relative;
+           box-sizing: border-box;
+           resize: vertical;
+           border: 1px solid #D4EBF8;  /* Light blue border color to match your nav background */
+           border-radius: 3px;
+           transition: border-color 0.2s ease;
+}
+
+/* Add hover effect */
+.full-width:hover {
+    border-color: #a8d7f1;  /* Slightly darker shade for hover */
+}
+
+/* Add focus effect */
+.full-width:focus {
+    border-color: #7cc4ea;  /* Even darker shade for focus */
+    outline: none;  /* Remove default focus outline */
+    box-shadow: 0 0 0 2px rgba(212, 235, 248, 0.3);  /* Subtle focus shadow */
+}
+
+    </style>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+        }
+        nav {
+            background-color: #D4EBF8; /* Light green background */
+            padding: 15px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .logo {
+            display: flex;
+            align-items: center;
+        }
+        .logo img {
+            height: 100px; /* Adjust logo size */
+            margin-right: 10px;
+        }
+        .logo div {
+            line-height: 1.2;
+        }
+        .logo h2 {
+            margin: 0;
+            font-size: 20px;
+            color: #333;
+        }
+        .logo p {
+            margin: 0;
+            font-size: 14px;
+            color: #666;
+        }
+        .menu {
+            display: flex;
+            gap: 20px; /* Space between buttons */
+        }
+        .menu button {
+            background-color: white;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 10px 20px;
+            cursor: pointer;
+            transition: background-color 0.3s, box-shadow 0.3s;
+        }
+        .menu button:hover {
+            background-color: #f0f0f0;
+            box-shadow: 0px 0px 5px #ddd;
+        }
+        .right-links {
+            display: flex;
+            gap: 20px; /* Space between links */
+        }
+        .right-links a {
+            text-decoration: none;
+            color: #333;
+            font-size: 14px;
+        }
+        .right-links a:hover {
+            text-decoration: underline;
+        }
+    </style>
+
+
+</head>
+
+<nav>
+    <div class="logo">
+        <img src="/akashvanilogo.png" alt="Logo">
+        <div>
+            <h1 style="color: #0A5EB0;">AKASHVANI AGARTALA</h1>
+            <h4 style="color: #0A5EB0;">Audio Switcher User Interface</h4>
+        </div>
+    </div>
+</nav>
+
+<body>
+
+<div style="background-color: #155E95;">
+    <h2 style="color: #f0f0f0;"></h2>
+</div>
+<br><br>
+<div class="cont">
+    <!-- -----------------------------------Control Information-------------------------------------------------------------------- -->
+    <div class="form sign-in">
+        <h4 style="color: #155E95;">CONTROL INFORMATION</h4>
+
+        <button type="button" class="submit" onclick="sendData1()" id="Call">SWA</button>
+        <button type="button" class="submit" onclick="sendData1()" id="Call">SWB</button>
+        <button type="button" class="submit" onclick="sendData1()" id="Call">SWC</button>
+        <br>
+        <br>
+        <!-- <label for="exampleFormControlTextarea1" class="form-label">STATUS</label> -->
+        <h4 style="color: #155E95;">STATUS</h4>
+        <br>
+        <textarea id="exampleFormControlTextarea1" class="full-width"></textarea>
+    </div>
+    <div class="sub-cont">
+        <div class="img">
+            <div class="img__text m--up">
+                <h4>CONTROL INFORMATION</h4>
+            </div>
+            <div class="img__text m--in">
+                <h3>NETWORK INFORMATION</h3>
+            </div>
+            <div class="img__btn">
+                <span class="m--up">SWITCH TAB</span>
+                <span class="m--in">SWITCH TAB</span>
+            </div>
+        </div>
+
+        <!-- -------------------Network information --------------------------------------------------------------------   -->
+        <div class="form Admin-sign-in">
+            <h4 style="color: #155E95;">NETWORK INFORMATION</h4>
+            <label>
+            <span>SSID</span>
+            <input type="text" id="inputId" required />
+            </label>
+            <label>
+            <span>PASSWORD</span>
+            <input type="text" id="inputIp" required />
+            </label>
+            <label>
+            <span>IP ADDRESS</span>
+            <input type="text" id="inputIa" required />
+            </label>
+            <label>
+            <span>GATEWAY</span>
+            <input type="text" id="inputIg" required />
+            </label>
+            <button type="button" class="submit" onclick="sendData1()" id="Call">Save</button>
+        </div>
+    </div>
+</div>
+<script>
+    document.querySelector('.img__btn').addEventListener('click', function() {
+        document.querySelector('.cont').classList.toggle('s--signup');
+    });
+</script>
+<script>
+function sendData(ph) {
+
+
+    var xhttp = new XMLHttpRequest();
+    xhttp.onreadystatechange = function() {
+      if (this.readyState == 4 && this.status == 200) {
+        document.getElementById("phstate").innerHTML =
+        this.responseText;
+      }
+    };
+    xhttp.open("GET", "setph?phstate="+ph, true);
+    xhttp.send();
+  }
+  
+  
+  function sendData1()
+  {
+  
+   let inputval=document.getElementById("inputId").value;
+  let inputval1=document.getElementById("inputIp").value;
+  let inputval2=document.getElementById("inputIa").value;
+  let inputval3=document.getElementById("inputIg").value;
+  
+  sendData2(inputval);
+  sendData3(inputval1);
+  sendData4(inputval2);
+  sendData5(inputval3);
+  
+  
+  }
+  
+  
+  function sendData2(nm)
+  {
+  
+  var xhttp1=new XMLHttpRequest();
+  xhttp1.onreadystatechange=function(){
+  if (this.readyState==4 && this.status == 200){
+  document.getElementById("phstate1").inner.HTML=
+  this.responseText;
+  }
+  };
+  
+  xhttp1.open("GET", "setph1?phstate1="+nm, true);
+    xhttp1.send();
+  
+  }
+  
+  function sendData3(vl)
+  {
+  
+  var xhttp1=new XMLHttpRequest();
+  xhttp1.onreadystatechange=function(){
+  if (this.readyState==4 && this.status == 200){
+  document.getElementById("phstate2").inner.HTML=
+  this.responseText;
+  }
+  };
+  
+  xhttp1.open("GET", "setph2?phstate2="+vl, true)
+    xhttp1.send();
+  
+  }
+  
+  
+  function sendData4(ip)
+  {
+  
+  var xhttp1=new XMLHttpRequest();
+  xhttp1.onreadystatechange=function(){
+  if (this.readyState==4 && this.status == 200){
+  document.getElementById("phstate3").inner.HTML=
+  this.responseText;
+  }
+  };
+  
+  xhttp1.open("GET", "setph3?phstate3="+ip, true);
+    xhttp1.send();
+  
+  }
+  
+  function sendData5(ga)
+  {
+  
+  var xhttp1=new XMLHttpRequest();
+  xhttp1.onreadystatechange=function(){
+  if (this.readyState==4 && this.status == 200){
+  document.getElementById("phstate4").inner.HTML=
+  this.responseText;
+  }
+  };
+  
+  xhttp1.open("GET", "setph4?phstate4="+ga, true);
+    xhttp1.send();
+  
+  }
+  
+  
+  function getData() {
+    var xhttp = new XMLHttpRequest();
+    xhttp.onreadystatechange = function() {
+      if (this.readyState == 4 && this.status == 200) {
+        document.getElementById("baln").innerHTML =
+        this.responseText;
+      }
+    };
+    xhttp.open("GET", "bl", true);
+    xhttp.send();
+  }
+  setInterval(function() 
+  {
+    getData();
+  }, 400); 
+  
+  
+  function getData1() {
+    var xhttp = new XMLHttpRequest();
+    xhttp.onreadystatechange = function() {
+      if (this.readyState == 4 && this.status == 200) {
+        document.getElementById("baln1").innerHTML =
+        this.responseText;
+      }
+    };
+    xhttp.open("GET", "b2", true);
+    xhttp.send();
+  }
+  setInterval(function() 
+  {
+    getData1();
+  }, 400); 
+  
+  function getData2() {
+    var xhttp = new XMLHttpRequest();
+    xhttp.onreadystatechange = function() {
+      if (this.readyState == 4 && this.status == 200) {
+        document.getElementById("baln2").innerHTML =
+        this.responseText;
+      }
+    };
+    xhttp.open("GET", "b3", true);
+    xhttp.send();
+  }
+  setInterval(function() 
+  {
+    getData2();
+  }, 400); 
+  
+  
+  
+  function getData3() {
+    var xhttp = new XMLHttpRequest();
+    xhttp.onreadystatechange = function() {
+      if (this.readyState == 4 && this.status == 200) {
+        document.getElementById("baln3").innerHTML =
+        this.responseText;
+      }
+    };
+    xhttp.open("GET", "b4", true);
+    xhttp.send();
+  }
+  setInterval(function() 
+  {
+    getData3();
+  }, 400); 
+  
+  
+  function getData4() {
+    var xhttp = new XMLHttpRequest();
+    xhttp.onreadystatechange = function() {
+      if (this.readyState == 4 && this.status == 200) {
+        document.getElementById("baln4").innerHTML =
+        this.responseText;
+      }
+    };
+    xhttp.open("GET", "b5", true);
+    xhttp.send();
+  }
+  setInterval(function() 
+  {
+    getData4();
+  }, 400); 
+  
+  function getData5() {
+    var xhttp = new XMLHttpRequest();
+    xhttp.onreadystatechange = function() {
+      if (this.readyState == 4 && this.status == 200) {
+        document.getElementById("baln5").innerHTML =
+        this.responseText;
+      }
+    };
+    xhttp.open("GET", "b6", true);
+    xhttp.send();
+  }
+  setInterval(function() 
+  {
+    getData5();
+  }, 400); 
+  
+  
+  
+  
+  </script>
+</body>
+</html>
+)=====";
