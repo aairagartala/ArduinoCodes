@@ -1,0 +1,588 @@
+/*
+ * FM Transmitter Monitor - Arduino Due
+ * Web Server + Serial BitStream Parser + DHT11
+ *
+ * BitStream Layout (36 bytes, 0-indexed):
+ *  [0]       - ON/OFF status (1=ON, 0=OFF)
+ *  [1..4]    - Start string  (#,$,$,#)
+ *  [5..9]    - Frequency digits (e.g. 1,0,1,6,0 => 101.60 MHz)
+ *  [10..15]  - Audio level digits
+ *  [16..17]  - Low Output Power fault flag (index 16: flag, 17: secondary)
+ *  [18..20]  - Fwd Power digits  (e.g. 7,5,0 => 75.0 W)
+ *  [21..23]  - Fault VSWR High   (index 21: flag)
+ *  [22]      - Fault code tens digit  (7=all fault, 1=low+fault)
+ *  [23]      - Fault code units digit (3=all fault, 6=low+fault)
+ *  [24..29]  - Refl Power digits (e.g. 5,0,0,0,0,0 => 5.0 W)
+ *  [30..31]  - Set Power digits  (e.g. 8,5 => 85 W)
+ *  [32..35]  - End string ($,#,#,$)
+ *
+ * Fault Logic:
+ *  Cond1: buf[22]='7' AND buf[23]='3' → ALL 4 faults active
+ *  Cond2: buf[22]='1' AND buf[23]='6' → fPowerLow + fFault active
+ *  Cond3: (no cond1/2) fwdPower > 100 → fPowerHigh only
+ *  Cond4: (no cond1/2) fwdPower < 40  → fPowerLow only
+ *
+ * Notes for Arduino Due:
+ *  - 3.3V I/O — DO NOT connect 5V signals directly
+ *  - Uses Ethernet shield (W5100/W5500) on SPI pins 50-53
+ *  - Serial1 used for Tx data stream (RX=pin19, TX=pin18)
+ *  - Serial2 : RX=pin17, TX=pin16  (spare)
+ *  - Serial3 : RX=pin15, TX=pin14  (spare)
+ *  - 96KB SRAM — HTML page kept minimal / served in flushed chunks
+ *  - No PROGMEM on Due (SAM3X has unified address space)
+ *  - Watchdog disabled by default on Due; re-enable if needed
+ *
+ * ADDED: DHT11 on pin 48
+ *  - Read on same 2000ms cycle as bitstream
+ *  - NaN on read error → displays "--" on webpage
+ */
+
+#include <SPI.h>
+#include <Ethernet.h>
+// ADDED: DHT library
+#include <DHT.h>
+
+// ── Network config ────────────────────────────────────────────────────────────
+byte mac[]     = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED };
+IPAddress ip(192, 168, 1, 177);
+EthernetServer server(80);
+
+// ── BitStream config ──────────────────────────────────────────────────────────
+#define STREAM_LEN   36
+#define START_CHAR_0 '#'
+#define START_CHAR_1 '$'
+#define END_CHAR_0   '$'
+#define END_CHAR_3   '$'
+
+char   streamBuf[STREAM_LEN];
+bool   streamReady = false;
+
+// ADDED: DHT11 config
+#define DHT_PIN  50
+#define DHT_TYPE DHT11
+DHT dht(DHT_PIN, DHT_TYPE);
+
+// ── Parsed Tx parameters ──────────────────────────────────────────────────────
+struct TxData {
+  bool    txOn;
+  float   freqMHz;
+  float   audioLevel;
+  float   fwdPowerW;
+  float   reflPowerW;
+  float   setPowerW;
+  bool    faultPowerHigh;
+  bool    faultPowerLow;
+  bool    faultGeneral;
+  bool    faultVSWR;
+  // ADDED: DHT11 fields
+  float   tempC;        // NaN if read error
+  float   humidity;     // NaN if read error
+  bool    dhtOk;        // false if last read failed
+  int adcRaw;
+  bool    valid;
+} tx;
+
+// ── TX control pins ───────────────────────────────────────────────────────────
+#define PIN_TX_ON_CMD   7
+#define PIN_TX_OFF_CMD  8
+
+// ── Timing ────────────────────────────────────────────────────────────────────
+unsigned long lastParse  = 0;
+const    long PARSE_INT  = 500;
+
+unsigned long lastParsea  = 0;
+
+char c;
+
+static char    inBuf[STREAM_LEN * 2];
+static uint8_t idx = 0;
+
+int inbf[56];
+int i = 0;
+
+// =============================================================================
+// SETUP  — CHANGED: added dht.begin()
+// =============================================================================
+void setup() {
+  Serial.begin(115200);
+  Serial1.begin(9600);
+
+  pinMode(PIN_TX_ON_CMD,  OUTPUT);
+  pinMode(PIN_TX_OFF_CMD, OUTPUT);
+  digitalWrite(PIN_TX_ON_CMD,  LOW);
+  digitalWrite(PIN_TX_OFF_CMD, LOW);
+
+  // ADDED: init DHT11
+  dht.begin();
+
+  Ethernet.begin(mac, ip);
+  delay(1000);
+
+  server.begin();
+  Serial.print(F("Server at "));
+  Serial.println(Ethernet.localIP());
+
+  memset(streamBuf, '0', STREAM_LEN);
+  memset(&tx, 0, sizeof(tx));
+
+  // ADDED: init DHT fields to safe defaults
+  tx.tempC    = NAN;
+  tx.humidity = NAN;
+  tx.dhtOk    = false;
+
+  tx.adcRaw = 0;
+}
+
+// =============================================================================
+// LOOP  — unchanged
+// =============================================================================
+void loop() {
+  if (millis() - lastParsea > 2000) {
+    Serial1.write('R');
+    readSerial();
+    parseBitStream();
+    // ADDED: read DHT on same cycle
+    readDHT();
+
+    readADC();
+
+    lastParsea = millis();
+  }
+
+  handleClient();
+}
+
+// =============================================================================
+// SERIAL READER  — unchanged
+// =============================================================================
+void readSerial() {
+  while (Serial1.available()) {
+    c = Serial1.read();
+    if (c=='$' || c=='#' || c=='1' || c=='2' || c=='3' || c=='4' ||
+        c=='5' || c=='6' || c=='7' || c=='8' || c=='9' || c=='0') {
+      inBuf[idx++] = c;
+    }
+  }
+
+  if (idx >= STREAM_LEN * 2) idx = 0;
+
+  if (idx >= STREAM_LEN) {
+    int end = idx - 1;
+    if (inBuf[end] == '$') {
+      int start = end - STREAM_LEN + 1;
+      if (start >= 0 &&
+          inBuf[start + 1] == '#' &&
+          inBuf[start + 2] == '$' &&
+          inBuf[start + 3] == '$' &&
+          inBuf[start + 4] == '#') {
+        memcpy(streamBuf, &inBuf[start], STREAM_LEN);
+        streamReady = true;
+        idx = 0;
+        memset(inBuf, 0, sizeof(inBuf));
+      }
+    }
+  }
+}
+
+// =============================================================================
+// ADDED: DHT11 READER
+// Reads temp and humidity; sets dhtOk=false and NaN values on error
+// DHT11 needs ~1s between reads — safe inside the 2000ms cycle
+// =============================================================================
+void readDHT() {
+  float h = dht.readHumidity();
+  float t = dht.readTemperature();   // Celsius
+
+  if (isnan(h) || isnan(t)) {
+    tx.dhtOk    = false;
+    tx.tempC    = NAN;
+    tx.humidity = NAN;
+    Serial.println(F("[DHT] Read error"));
+  } else {
+    tx.dhtOk    = true;
+    tx.tempC    = t;
+    tx.humidity = h;
+    Serial.print(F("[DHT] Temp="));   Serial.print(t, 1);
+    Serial.print(F("C  Humid="));     Serial.print(h, 1);
+    Serial.println(F("%"));
+  }
+}
+
+void readADC() {
+  tx.adcRaw = analogRead(A9) *0.54;
+  Serial.print(F("[ADC] A9 raw="));
+  Serial.println(tx.adcRaw);
+}
+
+
+// =============================================================================
+// PARSER  — unchanged
+// =============================================================================
+void parseBitStream() {
+  auto digits = [](char* buf, int start, int len) -> int {
+    int val = 0;
+    for (int i = start; i < start + len; i++) {
+      char c = buf[i];
+      if (c >= '0' && c <= '9') val = val * 10 + (c - '0');
+    }
+    return val;
+  };
+
+  tx.txOn = (streamBuf[0] == '1');
+
+  int freqRaw = digits(streamBuf, 5, 5);
+  tx.freqMHz  = freqRaw / 100.0f;
+
+  int audioRaw = digits(streamBuf, 10, 6);
+  tx.audioLevel = audioRaw / 10.0f;
+
+  int fwdRaw = digits(streamBuf, 18, 3);
+  tx.fwdPowerW = fwdRaw / 10.0f;
+
+  int reflRaw = digits(streamBuf, 24, 2);
+  tx.reflPowerW = reflRaw / 10.0f;
+
+  tx.setPowerW = (float)digits(streamBuf, 30, 2);
+
+  char f1 = streamBuf[21];
+  char f2 = streamBuf[22];
+
+  if (f1 == '7' && f2 == '3') {
+    tx.faultPowerHigh = true;
+    tx.faultPowerLow  = true;
+    tx.faultGeneral   = true;
+    tx.faultVSWR      = true;
+  }
+  else if (f1 == '1' && f2 == '6') {
+    tx.faultPowerHigh = false;
+    tx.faultPowerLow  = true;
+    tx.faultGeneral   = true;
+    tx.faultVSWR      = false;
+  }
+
+  else if (f1 == '6' && f2 == '5') {
+    tx.faultPowerHigh = false;
+    tx.faultPowerLow  = true;
+    tx.faultGeneral   = true;
+    tx.faultVSWR      = true;
+  }
+
+  else if (tx.fwdPowerW > 100.0f) {
+    tx.faultPowerHigh = true;
+    tx.faultPowerLow  = false;
+    tx.faultGeneral   = false;
+    tx.faultVSWR      = false;
+  }
+  else if (tx.fwdPowerW < 40.0f) {
+
+    if(tx.txOn==1)
+    {
+    tx.faultPowerHigh = false;
+    tx.faultPowerLow  = true;
+    tx.faultGeneral   = false;
+    tx.faultVSWR      = false;
+    }
+  
+  }
+  else {
+    tx.faultPowerHigh = false;
+    tx.faultPowerLow  = false;
+    tx.faultGeneral   = false;
+    tx.faultVSWR      = false;
+  }
+
+  tx.valid = true;
+
+  Serial.print(F("Tx:"));    Serial.print(tx.txOn);
+  Serial.print(F(" Freq:")); Serial.print(tx.freqMHz);
+  Serial.print(F(" Fwd:"));  Serial.print(tx.fwdPowerW);
+  Serial.print(F(" Refl:")); Serial.print(tx.reflPowerW);
+  Serial.print(F(" f1="));   Serial.print(f1);
+  Serial.print(F(" f2="));   Serial.print(f2);
+  Serial.print(F(" PwrHi=")); Serial.print(tx.faultPowerHigh);
+  Serial.print(F(" PwrLo=")); Serial.print(tx.faultPowerLow);
+  Serial.print(F(" Fault="));  Serial.print(tx.faultGeneral);
+  Serial.print(F(" VSWR="));   Serial.println(tx.faultVSWR);
+
+   
+}
+
+// =============================================================================
+// BUILD JSON  — CHANGED: added temp and humid fields
+// =============================================================================
+void sendJSON(EthernetClient &client) {
+  client.print(F("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n"));
+  client.print(F("{"));
+  client.print(F("\"on\":")); client.print(tx.txOn ? 1 : 0); client.print(F(","));
+  client.print(F("\"freq\":")); client.print(tx.freqMHz, 2); client.print(F(","));
+  client.print(F("\"fwd\":")); client.print(tx.fwdPowerW, 1); client.print(F(","));
+  client.print(F("\"refl\":")); client.print(tx.reflPowerW, 1); client.print(F(","));
+  client.print(F("\"set\":")); client.print(tx.setPowerW, 0); client.print(F(","));
+  client.print(F("\"audio\":")); client.print(tx.audioLevel, 1); client.print(F(","));
+  client.print(F("\"fVSWR\":")); client.print(tx.faultVSWR ? 1 : 0); client.print(F(","));
+  client.print(F("\"fHigh\":")); client.print(tx.faultPowerHigh ? 1 : 0); client.print(F(","));
+  client.print(F("\"fLow\":")); client.print(tx.faultPowerLow ? 1 : 0); client.print(F(","));
+  client.print(F("\"fFault\":")); client.print(tx.faultGeneral ? 1 : 0); client.print(F(","));
+  // ADDED: DHT fields — send -999 as sentinel when read failed (NaN is not valid JSON)
+  if (tx.dhtOk) {
+    client.print(F("\"temp\":")); client.print(tx.tempC, 1); client.print(F(","));
+    client.print(F("\"humid\":")); client.print(tx.humidity, 1);client.print(F(","));
+  } else {
+    client.print(F("\"temp\":-999,"));
+    client.print(F("\"humid\":-999,"));
+  }
+
+   client.print(F("\"adc\":")); client.print(tx.adcRaw);
+
+  client.print(F("}"));
+}
+
+// =============================================================================
+// HTTP CLIENT HANDLER  — unchanged
+// =============================================================================
+void handleClient() {
+  EthernetClient client = server.available();
+  if (!client) return;
+
+  char reqLine[64];
+  uint8_t ri = 0;
+  unsigned long timeout = millis() + 1500;
+
+  while (client.connected() && millis() < timeout) {
+    if (client.available()) {
+      char c = client.read();
+      if (c == '\n') break;
+      if (ri < 63) reqLine[ri++] = c;
+    }
+  }
+  reqLine[ri] = '\0';
+
+  bool blankLine = false;
+  char prev = 0;
+  timeout = millis() + 1500;
+  while (client.connected() && !blankLine && millis() < timeout) {
+    if (client.available()) {
+      char c = client.read();
+      if (c == '\n' && prev == '\r') blankLine = true;
+      prev = c;
+    }
+  }
+
+  if (strstr(reqLine, "GET /data")) {
+    sendJSON(client);
+  } else if (strstr(reqLine, "GET /txon")) {
+    Serial1.write('A');
+    client.print(F("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\nOK"));
+  } else if (strstr(reqLine, "GET /txoff")) {
+    Serial1.write('B');
+    client.print(F("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\nOK"));
+  } else {
+    sendHTMLPage(client);
+  }
+
+  delay(1);
+  client.stop();
+}
+
+// =============================================================================
+// HTML PAGE
+// CHANGED: two new compact cards (Temp + Humidity) added to existing grid
+// All other HTML, CSS, JS, flush pattern — unchanged
+// =============================================================================
+void sendHTMLPage(EthernetClient &client) {
+  client.print(F("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n"));
+  client.flush();
+
+  client.print(F("<!DOCTYPE html><html><head>"));
+  client.print(F("<meta charset='UTF-8'>"));
+  client.print(F("<meta name='viewport' content='width=device-width,initial-scale=1'>"));
+  client.print(F("<title>FM TX Monitor</title>"));
+  client.flush();
+  delay(10);
+
+  client.print(F("<style>"));
+  client.print(F("*{box-sizing:border-box;margin:0;padding:0}"));
+  client.print(F("body{background:#0d0d0d;color:#e0e0e0;font-family:'Courier New',monospace;padding:16px}"));
+  client.print(F("h1{text-align:center;font-size:1.1em;letter-spacing:4px;color:#00e5ff;margin-bottom:18px}"));
+  client.print(F(".grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;max-width:480px;margin:0 auto}"));
+  client.flush();
+  delay(10);
+
+  client.print(F(".card{background:#141414;border:1px solid #222;border-radius:6px;padding:14px;text-align:center}"));
+  client.print(F(".label{font-size:.65em;letter-spacing:2px;color:#777;text-transform:uppercase;margin-bottom:6px}"));
+  client.print(F(".val{font-size:1.6em;font-weight:bold;color:#00e5ff}"));
+  client.print(F(".unit{font-size:.7em;color:#555;margin-left:3px}"));
+  client.print(F(".ind{display:inline-block;width:16px;height:16px;border-radius:50%;margin:4px;vertical-align:middle}"));
+  client.flush();
+  delay(10);
+
+  client.print(F(".green{background:#00c853;box-shadow:0 0 8px #00c853}"));
+  client.print(F(".red{background:#d50000;box-shadow:0 0 8px #d50000}"));
+  client.print(F(".grey{background:#333}"));
+  client.print(F(".fault-row{display:flex;align-items:center;justify-content:space-between;"));
+  client.print(F("background:#141414;border:1px solid #222;border-radius:6px;padding:10px 14px;margin-bottom:8px}"));
+  client.flush();
+  delay(10);
+
+  client.print(F(".fault-label{font-size:.75em;letter-spacing:1px;text-transform:uppercase;color:#aaa}"));
+  client.print(F(".fault-btn{padding:4px 12px;border:none;border-radius:4px;font-size:.7em;letter-spacing:1px}"));
+  client.print(F(".fault-ok{background:#1a1a1a;color:#444;border:1px solid #333}"));
+  client.print(F(".fault-active{background:#d50000;color:#fff;box-shadow:0 0 10px #d50000;animation:pulse .8s infinite}"));
+  client.print(F(".ctrl{display:flex;gap:12px;justify-content:center;margin-top:14px}"));
+  client.flush();
+  delay(10);
+
+  client.print(F(".btn{flex:1;max-width:160px;padding:12px;border:none;border-radius:6px;"));
+  client.print(F("font-size:.85em;letter-spacing:2px;cursor:pointer;text-transform:uppercase;font-family:inherit}"));
+  client.print(F(".btn-on{background:#00c853;color:#000}"));
+  client.print(F(".btn-off{background:#d50000;color:#fff}"));
+  client.print(F(".btn:hover{opacity:.85}"));
+  client.print(F("@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}"));
+  client.print(F(".status-bar{text-align:center;margin-bottom:14px;font-size:.7em;color:#444;letter-spacing:2px}"));
+  // ADDED: error state color for DHT cards — subtle amber, same size as .val
+  client.print(F(".val-err{font-size:1.6em;font-weight:bold;color:#555}"));
+  client.print(F("</style></head><body>"));
+  client.flush();
+  delay(10);
+
+  client.print(F("<h1>&#x1F4F6; FM Transmitter Monitor</h1>"));
+  client.print(F("<div class='status-bar' id='lastUpdate'>Connecting...</div>"));
+  client.print(F("<div style='display:flex;justify-content:center;gap:16px;margin-bottom:14px'>"));
+  client.print(F("<div class='card' style='flex:1;max-width:300px'>"));
+  client.print(F("<div class='label'>TX Status</div>"));
+  client.print(F("<span id='txStatus'>"));
+  client.print(F("<span class='ind grey' id='indOn'></span>TX ON&nbsp;&nbsp;"));
+  client.print(F("<span class='ind grey' id='indOff'></span>TX OFF"));
+  client.print(F("</span></div></div>"));
+  client.flush();
+  delay(10);
+
+  // ── Grid: existing 4 cards + ADDED 2 DHT cards = 6 cards total ────────────
+  client.print(F("<div class='grid'>"));
+
+  client.print(F("<div class='card'><div class='label'>Frequency</div>"));
+  client.print(F("<span class='val' id='freq'>--</span><span class='unit'>MHz</span></div>"));
+
+  client.print(F("<div class='card'><div class='label'>Fwd Power</div>"));
+  client.print(F("<span class='val' id='fwd'>--</span><span class='unit'>W</span></div>"));
+
+  client.print(F("<div class='card'><div class='label'>Refl Power</div>"));
+  client.print(F("<span class='val' id='refl'>--</span><span class='unit'>W</span></div>"));
+
+  client.print(F("<div class='card'><div class='label'>Set Power</div>"));
+  client.print(F("<span class='val' id='setp'>--</span><span class='unit'>W</span></div>"));
+
+  // ADDED: Temperature card
+  client.print(F("<div class='card'><div class='label'>Temperature</div>"));
+  client.print(F("<span class='val' id='temp'>--</span><span class='unit'>&#8451;</span></div>"));
+
+  // ADDED: Humidity card
+  client.print(F("<div class='card'><div class='label'>Humidity</div>"));
+  client.print(F("<span class='val' id='humid'>--</span><span class='unit'>%RH</span></div>"));
+
+
+client.print(F("<div class='card'><div class='label'>Input Voltage</div>"));
+  client.print(F("<span class='val' id='adc'>--</span><span class='unit'>V</span></div>"));
+
+  client.print(F("</div>"));
+  // ── END grid ──────────────────────────────────────────────────────────────
+  client.flush();
+  delay(10);
+
+  // Fault rows — unchanged
+  client.print(F("<div style='max-width:480px;margin:14px auto 0'>"));
+  client.print(F("<div class='fault-row'><span class='fault-label'>O/P Power High</span>"));
+  client.print(F("<button class='fault-btn fault-ok' id='fHigh'>NORMAL</button></div>"));
+  client.print(F("<div class='fault-row'><span class='fault-label'>O/P Power Low</span>"));
+  client.print(F("<button class='fault-btn fault-ok' id='fLow'>NORMAL</button></div>"));
+  client.print(F("<div class='fault-row'><span class='fault-label'>Fault</span>"));
+  client.print(F("<button class='fault-btn fault-ok' id='fFault'>NORMAL</button></div>"));
+  client.print(F("<div class='fault-row'><span class='fault-label'>VSWR High</span>"));
+  client.print(F("<button class='fault-btn fault-ok' id='fVSWR'>NORMAL</button></div>"));
+  client.print(F("</div>"));
+  client.flush();
+  delay(10);
+
+  // Control buttons — unchanged
+  client.print(F("<div class='ctrl'>"));
+  client.print(F("<button class='btn btn-on' onclick='txCmd(this)' data-url='/txon'>&#9654; TX ON</button>"));
+  client.print(F("<button class='btn btn-off' onclick='txCmd(this)' data-url='/txoff'>&#9632; TX OFF</button>"));
+  client.print(F("</div>"));
+  client.flush();
+  delay(10);
+
+
+
+  // JS — unchanged except two lines added in poll() for temp/humid
+  client.print(F("<script>"));
+  client.flush();
+  delay(5);
+
+  
+
+
+  client.print(F("function txCmd(el){"));
+  client.print(F("var url=el.getAttribute('data-url');"));
+  client.print(F("var r=new XMLHttpRequest();"));
+  client.print(F("r.open('GET',url,true);"));
+  client.print(F("r.onload=function(){console.log('SENT:'+url);};"));
+  client.print(F("r.onerror=function(){console.log('FAIL:'+url);};"));
+  client.print(F("r.send();"));
+  client.print(F("}"));
+  client.flush();
+  delay(5);
+
+  client.print(F("function setFault(id,a){"));
+  client.print(F("var b=document.getElementById(id);"));
+  client.print(F("b.className='fault-btn '+(a?'fault-active':'fault-ok');"));
+  client.print(F("b.textContent=a?'FAULT':'NORMAL';}"));
+  client.flush();
+  delay(5);
+
+  client.print(F("function poll(){"));
+  client.print(F("var r=new XMLHttpRequest();"));
+  client.print(F("r.open('GET','/data',true);"));
+  client.print(F("r.onload=function(){"));
+  client.print(F("if(r.status==200){"));
+  client.print(F("var d=JSON.parse(r.responseText);"));
+  client.flush();
+  delay(5);
+
+  client.print(F("document.getElementById('freq').textContent=d.freq.toFixed(2);"));
+  client.print(F("document.getElementById('fwd').textContent=d.fwd.toFixed(1);"));
+  client.print(F("document.getElementById('refl').textContent=d.refl.toFixed(1);"));
+  client.print(F("document.getElementById('setp').textContent=d.set;"));
+  client.flush();
+  delay(5);
+
+  // ADDED: update temp and humid cards; show '--' on error sentinel (-999)
+  client.print(F("var te=document.getElementById('temp');"));
+  client.print(F("var hu=document.getElementById('humid');"));
+  client.print(F("if(d.temp==-999){"));
+  client.print(F("te.className='val-err';te.textContent='--';"));
+  client.print(F("hu.className='val-err';hu.textContent='--';"));
+  client.print(F("}else{"));
+  client.print(F("te.className='val';te.textContent=d.temp.toFixed(1);"));
+  client.print(F("hu.className='val';hu.textContent=d.humid.toFixed(1);"));
+  client.print(F("}"));
+  client.flush();
+  delay(5);
+
+   client.print(F("document.getElementById('adc').textContent=d.adc;"));
+
+  client.print(F("var on=d.on==1;"));
+  client.print(F("document.getElementById('indOn').className='ind '+(on?'green':'grey');"));
+  client.print(F("document.getElementById('indOff').className='ind '+(on?'grey':'red');"));
+  client.print(F("setFault('fHigh',d.fHigh==1);"));
+  client.print(F("setFault('fLow',d.fLow==1);"));
+  client.print(F("setFault('fFault',d.fFault==1);"));
+  client.print(F("setFault('fVSWR',d.fVSWR==1);"));
+  client.print(F("document.getElementById('lastUpdate').textContent='Updated: '+new Date().toLocaleTimeString();"));
+  client.print(F("}};r.send();}"));
+  client.flush();
+  delay(5);
+
+  client.print(F("poll();setInterval(poll,1000);"));
+  client.print(F("</script></body></html>"));
+  client.flush();
+}
